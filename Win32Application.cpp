@@ -89,6 +89,12 @@ LRESULT Win32Application::windowProc(HWND hWnd, UINT message, WPARAM wParam, LPA
 		}
 		return 0;
 
+	case WM_MOUSEWHEEL:
+		if (sample) {
+			sample->onMouseWheel(wParam);
+		}
+		return 0;
+
 	case WM_PAINT:
 		if (sample) {
 			sample->onUpdate(wParam, lParam);

@@ -7,6 +7,7 @@
 #include "Animation.h"
 #include "BoundingBox.h"
 #include "Help.h"
+#include "CSUHeap.h"
 
 class Block {
 public:
@@ -28,10 +29,10 @@ public:
 	};
 
 public:
-	Block();
-	Block(DirectX::XMFLOAT3 position);
-	Block(DirectX::XMFLOAT3 position, float radius);
-	Block(const Block& rhs, DirectX::XMFLOAT3 offset);
+	Block(UINT index = 1);
+	Block(DirectX::XMFLOAT3 position, UINT index = 1);
+	Block(DirectX::XMFLOAT3 position, float radius, UINT index = 1);
+	Block(const Block& rhs, DirectX::XMFLOAT3 offset, UINT index = 1);
 
 	Block& operator=(const Block& rhs) = default;
 
@@ -39,7 +40,11 @@ public:
 		return box_ < rhs.box_;
 	}
 
-	void fullVertices();
+	static void setDevice(ID3D12Device2* device) { 
+		device_ = device;
+	}
+
+	void initialize();
 
 	DirectX::XMFLOAT3 position() const { return position_; }
 	float x() const { return x_; }
@@ -64,14 +69,20 @@ public:
 	Face selectedFace(DirectX::XMFLOAT3 pOrigin, DirectX::XMFLOAT3 pDirection);
 	Face selectedFace(DirectX::XMFLOAT3 pOrigin, DirectX::XMFLOAT3 pDirection, std::wstring& msg);
 private:
+	static ID3D12Device2* device_;
+
 	DirectX::XMFLOAT3  position_;
 	float x_;
 	float y_;
 	float z_;
 	float radius_;
 
+public:
 	std::vector<Vertex> vertices_;
+	std::vector<UINT> textureIndex_;
+	UINT index_;
 
+private:
 	bool selected_ = false;
 
 	bool lessEqual(float a, float b) const {

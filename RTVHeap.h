@@ -4,7 +4,7 @@
 
 #include "DescriptorHeap.h"
 
-class RTVHeap : public DescriptorHeap {
+class RTVHeap : public my::DescriptorHeap {
 public:
 	RTVHeap(const Microsoft::WRL::ComPtr<ID3D12Device2>& device, UINT frameCount);
 

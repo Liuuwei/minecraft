@@ -46,4 +46,6 @@ public:
 	static bool greaterEqual(float a, float b) {
 		return a > b || equal(a, b);
 	}
+
+	static float distance_;
 };

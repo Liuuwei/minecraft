@@ -15,6 +15,11 @@ DirectX::XMMATRIX Camera::getProjectionMatrix(float width, float height, float n
 	return XMMatrixPerspectiveFovRH(XMConvertToRadians(zoom_), width / (height), n, f);
 }
 
+DirectX::XMMATRIX Camera::getOrthogonalMatrix(float width, float height, float n, float f) {
+	return XMMatrixOrthographicRH(width, height, n, f);
+}
+
+
 void Camera::onKeyDown(WPARAM key) {
 	switch (key) {
 	case 'W':

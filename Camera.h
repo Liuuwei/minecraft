@@ -9,6 +9,7 @@ public:
 
 	DirectX::XMMATRIX getViewMatrix();
 	DirectX::XMMATRIX getProjectionMatrix(float width, float height, float near, float far);
+	DirectX::XMMATRIX getOrthogonalMatrix(float width, float height, float near, float far);
 
 	void setCenter(int x, int y);
 

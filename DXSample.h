@@ -26,6 +26,8 @@ public:
 	virtual void onRightButtonDown() {}
 	virtual void onLeftButtonDown() {}
 
+	virtual void onMouseWheel(WPARAM wParam) {}
+
 	UINT getWidth() const { return width_; }
 	UINT getHeight() const { return height_; }
 	const WCHAR* getTitle() const { return title_.c_str(); }

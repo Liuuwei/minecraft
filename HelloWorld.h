@@ -13,6 +13,9 @@
 #include "DSVHeap.h"
 #include "RTVHeap.h"
 #include "PipelineState.h"
+#include "Rectangle.h"
+#include "RootSignature.h"
+#include "Square.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -26,26 +29,27 @@ public:
 	void onRender() override;
 	void onDestroy() override;
 
-	void onKeyDown(WPARAM key) override {
-		camera_.onKeyDown(key);
-	}
+	void onKeyDown(WPARAM key) override;
 
-	void onKeyUp(WPARAM key) override {
-		camera_.onKeyUp(key);
-	}
+	void onKeyUp(WPARAM key) override;
 
-	void onMouseMovement(LPARAM param) override {
-		camera_.onMouseMovement(param);
-	}
+	void onMouseMovement(LPARAM param) override;
 
 	void onRightButtonDown() override;
 	void onLeftButtonDown() override;
 
+	void onMouseWheel(WPARAM wParam) override;
+
 private:
+	void show(const std::wstring& msg) {
+		SetWindowText(hwnd_, msg.c_str());
+	}
 	static const UINT frameCount_ = 2;
 	static const UINT textureWidth_ = 256;
 	static const UINT textureHeight_ = 256;
 	static const UINT texturePixelSize = 4;
+
+	static const UINT numTextures_ = 6;
 
 	struct SceneConstantBuffer {
 		XMFLOAT4 offset;
@@ -62,21 +66,39 @@ private:
 	ComPtr<ID3D12Resource> renderTargets_[frameCount_];
 	ComPtr<ID3D12CommandAllocator> commandAllocator_;
 	ComPtr<ID3D12CommandQueue> commandQueue_;
-	ComPtr<ID3D12RootSignature> rootSignature_;
+	std::unique_ptr<my::RootSignature> defaultRootSignature_;
+	std::unique_ptr<my::RootSignature> rectangleRootSignature_;
+	std::unique_ptr<my::RootSignature> squareRootSignature_;
+	std::unique_ptr<my::RootSignature> cursorRootSignature_;
 	std::unique_ptr<PipelineState> defaultPSO_;
 	std::unique_ptr<PipelineState> skyboxPSO_;
 	std::unique_ptr<PipelineState> minecraftPSO_;
 	std::unique_ptr<PipelineState> boxPSO_;
+	std::unique_ptr<PipelineState> rectanglePSO_;
+	std::unique_ptr<PipelineState> squarePSO_;
 	ComPtr<ID3D12GraphicsCommandList1> commandList_;
 	UINT rtvDescriptorSize_;
 	UINT csuDescriptorSize_;
 	bool depthBoundsTestSupported_;
 
 	std::vector<Block::Vertex> vertices_;
+	std::vector<my::Rectangle::Vertex> rectangleVertices_;
+	UINT8* rectangleData_;
+	ComPtr<ID3D12Resource> rectangleBuffer_;
+	D3D12_VERTEX_BUFFER_VIEW rectangleView_;
+	std::vector<my::Square::Vertex> squareVertices_;
+	UINT8* squareData_;
+	ComPtr<ID3D12Resource> squareBuffer_;
+	D3D12_VERTEX_BUFFER_VIEW squareView_;
 	ComPtr<ID3D12Resource> blockBuffer_;
 	D3D12_VERTEX_BUFFER_VIEW blockBufferView_;
 	UINT8* blockData_;
 	Block* block;
+	std::vector<UINT> textureIndex_;
+	ComPtr<ID3D12Resource> textureIndexBuffer_;
+	UINT8* textureIndexData_;
+	UINT currBlockIndex_ = 1;
+	D3D12_VERTEX_BUFFER_VIEW textureIndexBufferView_;
 	ComPtr<ID3D12Resource> skyBuffer_;
 	D3D12_VERTEX_BUFFER_VIEW skyBufferView_;
 	UINT8* skyData_;

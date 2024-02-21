@@ -8,6 +8,9 @@
 
 #include "DXSampleHelper.h"
 
+namespace my
+{
+
 class DescriptorHeap {
 public:
 	DescriptorHeap(const Microsoft::WRL::ComPtr<ID3D12Device2>& device) : device_(device) {}
@@ -17,7 +20,12 @@ public:
 	CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandle(const std::string& name) { return cpuHandles_[name]; }
 	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(const std::string& name) { return gpuHandles_[name]; }
 
+	static void setCommandQueue(ID3D12CommandQueue* commandQueue) {
+		commandQueue_ = commandQueue;
+	}
+
 protected:
+	static ID3D12CommandQueue* commandQueue_;
 	Microsoft::WRL::ComPtr<ID3D12Device2> device_ = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> heap_ = nullptr;
 
@@ -27,3 +35,5 @@ protected:
 
 	UINT descriptorSize_ = 0;
 };
+
+}

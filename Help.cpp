@@ -47,3 +47,5 @@ float Help::intersection(DirectX::XMVECTOR origin, DirectX::XMVECTOR direction, 
 	ret = origin + direction * time;
 	return time;
 }
+
+float Help::distance_ = 8.0f;

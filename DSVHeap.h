@@ -1,7 +1,7 @@
 #pragma once
 #include "DescriptorHeap.h"
 
-class DSVHeap : public DescriptorHeap {
+class DSVHeap : public my::DescriptorHeap {
 public:
 	DSVHeap(const Microsoft::WRL::ComPtr<ID3D12Device2>& device);
 

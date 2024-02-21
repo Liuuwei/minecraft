@@ -45,6 +45,8 @@ void CSUHeap::createConstantBuffer(const std::string& name, D3D12_HEAP_PROPERTIE
 }
 
 void CSUHeap::createConstantBufferView(const std::string& name, UINT size) {
+	createConstantBuffer(name, size);
+
 	D3D12_CONSTANT_BUFFER_VIEW_DESC desc{};
 	desc.BufferLocation = buffers_[name]->GetGPUVirtualAddress();
 	desc.SizeInBytes = size;
@@ -72,14 +74,17 @@ void CSUHeap::createShaderResourceBuffer(const std::string& name, const std::str
 	finish.wait();
 }
 
+void CSUHeap::createShaderResourceView(const std::string& name, const std::string& filename, D3D12_SHADER_RESOURCE_VIEW_DESC desc) {
+	createShaderResourceBuffer(name, filename, commandQueue_);
+	desc.Format = buffer(name)->GetDesc().Format;
+	desc.TextureCube.MipLevels = buffer(name)->GetDesc().MipLevels;
 
-void CSUHeap::createShaderResourceView(const std::string& name, D3D12_SHADER_RESOURCE_VIEW_DESC desc) {
 	CD3DX12_CPU_DESCRIPTOR_HANDLE cpuHandle(heap_->GetCPUDescriptorHandleForHeapStart(), srcIndex_, descriptorSize_);
 	CD3DX12_GPU_DESCRIPTOR_HANDLE gpuHandle(heap_->GetGPUDescriptorHandleForHeapStart(), srcIndex_, descriptorSize_);
 	srcIndex_++;
 	cpuHandles_[name] = cpuHandle;
 	gpuHandles_[name] = gpuHandle;
-
+	
 	device_->CreateShaderResourceView(buffers_[name].Get(), &desc, cpuHandle);
 }
 

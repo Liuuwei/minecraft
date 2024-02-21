@@ -12,6 +12,7 @@
 #include "Shader.h"
 #include "Win32Application.h"
 #include "Block.h"
+#include "RootSignature.h"
 
 HelloWorld::HelloWorld(UINT width, UINT height, std::wstring name) :
 	DXSample(width, height, std::move(name)),
@@ -47,6 +48,8 @@ void HelloWorld::onInit() {
 }
 
 void HelloWorld::onUpdate(WPARAM wParam, LPARAM lParam) {
+	std::wstring s;
+
 	gameTimer_.tick();	
 	camera_.onMouseMovement(lParam);
 	camera_.update(gameTimer_.deltaTime()); 
@@ -77,38 +80,14 @@ void HelloWorld::onUpdate(WPARAM wParam, LPARAM lParam) {
 
 	float time = 1e9;
 	currBlock_ = bvh_->intersection(Ray(camera_.position(), camera_.front()), bvh_->root_, time);
+	if (currBlock_ && currBlock_->lengthTo(camera_.position()) > Help::distance_) {
+		currBlock_ = nullptr;
+	}
 
-	std::wstring s;
-
-	Block::Face face(Block::NONE);
 	if (currBlock_) {
 		csuHeap_->upload("offset", &currBlock_->position(), sizeof(currBlock_->position()));
-		face = currBlock_->selectedFace(camera_.position(), camera_.front());
 	}
 
-	switch (face) {
-	case Block::FRONT:
-		s += L"FRONT";
-		break;
-	case Block::BACK:
-		s += L"BACK";
-		break;
-	case Block::UP:
-		s += L"UP";
-		break;
-	case Block::DOWN:
-		s += L"DOWN";
-		break;
-	case Block::RIGHT:
-		s += L"RIGHT";
-		break;
-	case Block::LEFT:
-		s += L"LEFT";
-		break;
-	case Block::NONE:
-		s += L"NONE";
-		break;
-	}
 	// SetWindowText(hwnd_, s.c_str());
 
 	SetCursorPos(center_.x, center_.y);
@@ -140,6 +119,40 @@ void HelloWorld::onDestroy() {
 	CloseHandle(fenceEvent_);
 }
 
+void HelloWorld::onKeyDown(WPARAM key) {
+	camera_.onKeyDown(key);
+	switch (key) {
+	case '1':
+		currBlockIndex_ = 1;
+		break;
+	case '2':
+		currBlockIndex_ = 2;
+		break;
+    case '3':
+		currBlockIndex_ = 3;
+		break;
+    case '4':
+		currBlockIndex_ = 4;
+		break;
+    case '5':
+		currBlockIndex_ = 5;
+		break;
+	case '6':
+		currBlockIndex_ = 6;
+		break;
+	default:
+		break;
+	}
+}
+
+void HelloWorld::onKeyUp(WPARAM key) {
+	camera_.onKeyUp(key);
+}
+
+void HelloWorld::onMouseMovement(LPARAM param) {
+	camera_.onMouseMovement(param);
+}
+
 void HelloWorld::onRightButtonDown() {
 	if (currBlock_ == nullptr) {
 		return ;
@@ -166,11 +179,14 @@ void HelloWorld::onRightButtonDown() {
 	case Block::DOWN:
 		offset = XMFLOAT3(0.0f, -1.0f, 0.0f);
 		break;
+	default:
+		return ;  
 	}
 
-	auto newBlock = new Block(*currBlock_, offset);
+	auto newBlock = new Block(*currBlock_, offset, currBlockIndex_);
 	blocks_.push_back(newBlock);
 	vertices_.insert(vertices_.end(), newBlock->begin(), newBlock->end());
+	textureIndex_.insert(textureIndex_.end(), newBlock->textureIndex_.begin(), newBlock->textureIndex_.end());
 
 	CD3DX12_RANGE range(0, 0);
 	ThrowIfFailed(device_->CreateCommittedResource(
@@ -189,13 +205,29 @@ void HelloWorld::onRightButtonDown() {
 	blockBufferView_.SizeInBytes = vertices_.size() * sizeof(Block::Vertex);
 	blockBufferView_.StrideInBytes = sizeof(Block::Vertex);
 
+	ThrowIfFailed(device_->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+		D3D12_HEAP_FLAG_NONE, 
+		&CD3DX12_RESOURCE_DESC::Buffer(textureIndex_.size() * sizeof(UINT)), 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&textureIndexBuffer_)));
+	
+	textureIndexBuffer_->Map(0, &range, reinterpret_cast<void**>(&textureIndexData_));
+	memcpy(textureIndexData_, textureIndex_.data(), textureIndex_.size() * sizeof(UINT));
+	textureIndexBuffer_->Unmap(0, nullptr);
+
+	textureIndexBufferView_.BufferLocation = textureIndexBuffer_->GetGPUVirtualAddress();
+	textureIndexBufferView_.SizeInBytes = textureIndex_.size() * sizeof(UINT);
+	textureIndexBufferView_.StrideInBytes = sizeof(UINT);
+
 	std::sort(blocks_.begin(), blocks_.end());
 	auto start = std::chrono::system_clock::now();
 	// bvh_->root_ = bvh_->buildBVH(blocks_);
 	bvh_->root_ = bvh_->buildBVH(blocks_, 0, blocks_.size() - 1);
 	auto end = std::chrono::system_clock::now();
 	auto seconds = L"milliseconds: " + std::to_wstring(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-	SetWindowText(hwnd_, seconds.c_str());
+	// SetWindowText(hwnd_, seconds.c_str());
 }
 
 void HelloWorld::onLeftButtonDown() {
@@ -214,9 +246,11 @@ void HelloWorld::onLeftButtonDown() {
 
 	currBlock_ = nullptr;
 	vertices_.clear();
+	textureIndex_.clear();
 
 	for (auto& block : blocks_) {
 		vertices_.insert(vertices_.end(), block->begin(), block->end());
+		textureIndex_.insert(textureIndex_.end(), block->textureIndex_.begin(), block->textureIndex_.end());
 	}
 
 	if (vertices_.empty()) {
@@ -240,18 +274,51 @@ void HelloWorld::onLeftButtonDown() {
 	blockBufferView_.SizeInBytes = vertices_.size() * sizeof(Block::Vertex);
 	blockBufferView_.StrideInBytes = sizeof(Block::Vertex);
 
+	ThrowIfFailed(device_->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+		D3D12_HEAP_FLAG_NONE, 
+		&CD3DX12_RESOURCE_DESC::Buffer(textureIndex_.size() * sizeof(UINT)), 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&textureIndexBuffer_)));
+	
+	textureIndexBuffer_->Map(0, &range, reinterpret_cast<void**>(&textureIndexData_));
+	memcpy(textureIndexData_, textureIndex_.data(), textureIndex_.size() * sizeof(UINT));
+	textureIndexBuffer_->Unmap(0, nullptr);
+
+	textureIndexBufferView_.BufferLocation = textureIndexBuffer_->GetGPUVirtualAddress();
+	textureIndexBufferView_.SizeInBytes = textureIndex_.size() * sizeof(UINT);
+	textureIndexBufferView_.StrideInBytes = sizeof(UINT);
+
 	auto start = std::chrono::system_clock::now();
 	bvh_->root_ = bvh_->buildBVH(blocks_, 0, blocks_.size() - 1);
 	auto end = std::chrono::system_clock::now();
 	auto seconds = L"milliseconds: " + std::to_wstring(std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
-	SetWindowText(hwnd_, seconds.c_str());
+	// SetWindowText(hwnd_, seconds.c_str());
 }
+
+void HelloWorld::onMouseWheel(WPARAM wParam) {
+	auto delta = GET_WHEEL_DELTA_WPARAM(wParam);
+	if (delta <= -120) {
+		currBlockIndex_ += -delta / 120;
+	} else if (delta >= 120) {
+		currBlockIndex_ -= delta / 120;
+	}
+
+	if (currBlockIndex_ > numTextures_) {
+		currBlockIndex_ = 1;
+	} else if (currBlockIndex_ < 1) {
+		currBlockIndex_ = numTextures_;
+	}
+}
+
 
 void HelloWorld::populateCommandList() {
 	commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList_->IASetVertexBuffers(0, 1, &skyBufferView_);
+	commandList_->IASetVertexBuffers(1, 1, &textureIndexBufferView_);
 
-	commandList_->SetGraphicsRootSignature(rootSignature_.Get());
+	commandList_->SetGraphicsRootSignature(defaultRootSignature_->rootSignature());
 	commandList_->SetPipelineState(skyboxPSO_->pipelineState());
 
 	ID3D12DescriptorHeap* heaps[] = {csuHeap_->heap().Get()};
@@ -264,16 +331,45 @@ void HelloWorld::populateCommandList() {
 
 	commandList_->SetPipelineState(defaultPSO_->pipelineState());
 	commandList_->IASetVertexBuffers(0, 1, &blockBufferView_);
+	commandList_->IASetVertexBuffers(1, 1, &textureIndexBufferView_);
 	commandList_->DrawInstanced(vertices_.size(), 1, 0, 0);
 
-	commandList_->SetGraphicsRootSignature(rootSignature_.Get());
+	commandList_->SetGraphicsRootSignature(rectangleRootSignature_->rootSignature());
+	commandList_->SetPipelineState(rectanglePSO_->pipelineState());
+	commandList_->IASetVertexBuffers(0, 1, &rectangleView_);
+	auto move = XMMatrixTranslation(-0.25, -0.91, 0.0);
+	auto scale = XMMatrixScaling(1.0 / 20.0, 1.0/ 20.0, 1.0);
+	auto model = scale * move;
+	XMFLOAT4X4 m;
+	XMStoreFloat4x4(&m, XMMatrixTranspose(model));
+	csuHeap_->upload("recModel", &m, sizeof(m));
+	float aspect = static_cast<float>(width_) / static_cast<float>(height_);
+	csuHeap_->upload("aspect", &aspect, sizeof(float));
+	csuHeap_->upload("selected", &currBlockIndex_, sizeof(currBlockIndex_));
+	commandList_->SetGraphicsRootDescriptorTable(0, csuHeap_->gpuHandle("recModel"));
+	commandList_->DrawInstanced(rectangleVertices_.size(), 1, 0, 0);
+
+	commandList_->SetGraphicsRootSignature(squareRootSignature_->rootSignature());
+	commandList_->SetPipelineState(squarePSO_->pipelineState());
+	commandList_->SetGraphicsRootDescriptorTable(0, csuHeap_->gpuHandle("recModel"));
+	commandList_->SetGraphicsRootDescriptorTable(1, csuHeap_->gpuHandle("grass2D"));
+	commandList_->IASetVertexBuffers(0, 1, &squareView_);
+	commandList_->DrawInstanced(squareVertices_.size(), 1, 0, 0);
+
+	commandList_->SetGraphicsRootSignature(defaultRootSignature_->rootSignature());
 	commandList_->SetPipelineState(boxPSO_->pipelineState()); 
 	commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
 	commandList_->SetGraphicsRootDescriptorTable(0, csuHeap_->gpuHandle("model_"));
 	if (currBlock_ != nullptr)
 		commandList_->DrawInstanced(32, 1, 0, 0);
 
+	commandList_->SetGraphicsRootSignature(cursorRootSignature_->rootSignature());
 	commandList_->SetPipelineState(minecraftPSO_->pipelineState());
+	scale = XMMatrixScaling(20.0f / static_cast<float>(width_), 20.0f / static_cast<float>(height_), 1.0f);
+	XMFLOAT4X4 s;
+	XMStoreFloat4x4(&s, XMMatrixTranspose(scale));
+	csuHeap_->upload("scale", &s, sizeof(s));
+	commandList_->SetGraphicsRootConstantBufferView(0, csuHeap_->buffer("scale")->GetGPUVirtualAddress());
 	commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_POINTLIST);
 	commandList_->IASetVertexBuffers(0, 1, &crossHairBufferView_);
 	commandList_->DrawInstanced(1, 1, 0, 0);
@@ -317,6 +413,7 @@ void HelloWorld::createDevice() {
 	rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
 	graphicsMemory_ = std::make_unique<DirectX::GraphicsMemory>(device_.Get());
+	Block::setDevice(device_.Get());
 }
 
 void HelloWorld::createCommandQueue() {
@@ -325,6 +422,8 @@ void HelloWorld::createCommandQueue() {
 	queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
 
 	ThrowIfFailed(device_->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&commandQueue_)));
+
+	my::DescriptorHeap::setCommandQueue(commandQueue_.Get());
 }
 
 
@@ -370,80 +469,103 @@ void HelloWorld::createRootSignature() {
 		featureData.HighestVersion = D3D_ROOT_SIGNATURE_VERSION_1_0;
 	}
 
-	CD3DX12_DESCRIPTOR_RANGE1 ranges[2];
-	CD3DX12_ROOT_PARAMETER1 rootParameter[2];
+	my::RootSignature::init(device_.Get(), featureData);
+
+	std::vector<CD3DX12_DESCRIPTOR_RANGE1> ranges(2);
+	std::vector<CD3DX12_ROOT_PARAMETER1> rootParameter(2);
 
 	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 4, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
 	rootParameter[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
 
-	ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1 + 6, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
 	rootParameter[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
 
-	D3D12_STATIC_SAMPLER_DESC sampler = {};
-	sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-	sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
-	sampler.MipLODBias = 0;
-	sampler.MaxAnisotropy = 0;
-	sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
-	sampler.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
-	sampler.MinLOD = 0.0f;
-	sampler.MaxLOD = D3D12_FLOAT32_MAX;
-	sampler.ShaderRegister = 0;
-	sampler.RegisterSpace = 0;
-	sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	std::vector<D3D12_STATIC_SAMPLER_DESC> sampler(1);
+	sampler[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	sampler[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	sampler[0].MipLODBias = 0;
+	sampler[0].MaxAnisotropy = 0;
+	sampler[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	sampler[0].BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+	sampler[0].MinLOD = 0.0f;
+	sampler[0].MaxLOD = D3D12_FLOAT32_MAX;
+	sampler[0].ShaderRegister = 0;
+	sampler[0].RegisterSpace = 0;
+	sampler[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
-	D3D12_ROOT_SIGNATURE_FLAGS rootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	defaultRootSignature_ = std::make_unique<my::RootSignature>(2, rootParameter, 1, sampler);
 
-	CD3DX12_VERSIONED_ROOT_SIGNATURE_DESC rootSignatureDesc;
-	rootSignatureDesc.Init_1_1(_countof(rootParameter), rootParameter,  1, &sampler, rootSignatureFlags);
+	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 3, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	rootParameter[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
+	ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	rootParameter[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
+	rectangleRootSignature_ = std::make_unique<my::RootSignature>(2, rootParameter);
 
-	ComPtr<ID3DBlob> signature;
-	ComPtr<ID3DBlob> error;
-	ThrowIfFailed(D3DX12SerializeVersionedRootSignature(&rootSignatureDesc, featureData.HighestVersion, &signature, &error));
-	ThrowIfFailed(device_->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&rootSignature_)));
+	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 2, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	rootParameter[0].InitAsDescriptorTable(1, &ranges[0], D3D12_SHADER_VISIBILITY_ALL);
+	ranges[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 6, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	rootParameter[1].InitAsDescriptorTable(1, &ranges[1], D3D12_SHADER_VISIBILITY_ALL);
+	squareRootSignature_ = std::make_unique<my::RootSignature>(2, rootParameter, 1, sampler);
+
+	ranges[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0, 0, D3D12_DESCRIPTOR_RANGE_FLAG_DATA_STATIC);
+	rootParameter[0].InitAsConstantBufferView(0, 0, D3D12_ROOT_DESCRIPTOR_FLAG_DATA_STATIC);
+	cursorRootSignature_ = std::make_unique<my::RootSignature>(1, rootParameter);
 }
 
 void HelloWorld::createPipeline() {
-	std::vector<D3D12_INPUT_ELEMENT_DESC> inputElementDescs = {
+	std::vector<D3D12_INPUT_ELEMENT_DESC> input = {
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
-		{"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
+		{"TEXCOORD", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}, 
+		{"TEXTURE_INDEX", 0, DXGI_FORMAT_R32_SINT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 
 	auto shader = Shader(L"defaultVertex.hlsl", L"defaultPixel.hlsl");
 	auto defaultDesc = PipelineState::getDefaultDesc();
 	defaultDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
-	defaultPSO_ = std::make_unique<PipelineState>(device_.Get(), rootSignature_.Get(), inputElementDescs, &shader, defaultDesc);
+	defaultPSO_ = std::make_unique<PipelineState>(device_.Get(), defaultRootSignature_->rootSignature(), input, &shader, defaultDesc);
 
 	auto skyBoxPSODesc = PipelineState::getDefaultDesc();
 	skyBoxPSODesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 	skyBoxPSODesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	shader = Shader(L"skyboxVertex.hlsl", L"skyboxPixel.hlsl");
-	skyboxPSO_ = std::make_unique<PipelineState>(device_.Get(), rootSignature_.Get(), inputElementDescs, &shader, skyBoxPSODesc);
+	skyboxPSO_ = std::make_unique<PipelineState>(device_.Get(), defaultRootSignature_->rootSignature(), input, &shader, skyBoxPSODesc);
 
-	std::vector<D3D12_INPUT_ELEMENT_DESC> input = {
+	input = {
 		{"POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0}
 	};
 
 	auto desc = PipelineState::getDefaultDesc();
 	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;
 	shader = Shader(L"mineVertex.hlsl", L"mineGeometry.hlsl", L"minePixel.hlsl");
-	minecraftPSO_ = std::make_unique<PipelineState>(device_.Get(), rootSignature_.Get(), input, &shader, desc);
+	minecraftPSO_ = std::make_unique<PipelineState>(device_.Get(), cursorRootSignature_->rootSignature(), input, &shader, desc);
 
 	desc = PipelineState::getDefaultDesc();
 	desc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
 	desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 	shader = Shader(L"boxVertex.hlsl", L"boxPixel.hlsl");
-	boxPSO_ = std::make_unique<PipelineState>(device_.Get(), rootSignature_.Get(), input, &shader, desc);
+	boxPSO_ = std::make_unique<PipelineState>(device_.Get(), defaultRootSignature_->rootSignature(), input, &shader, desc);
+
+	input = {
+		{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+		{"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 8, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+	};
+	shader = Shader(L"rectangleVertex.hlsl", L"rectanglePixel.hlsl");
+	desc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	desc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	rectanglePSO_ = std::make_unique<PipelineState>(device_.Get(), rectangleRootSignature_->rootSignature(), input, &shader, desc);
+
+	shader = Shader(L"squareVertex.hlsl", L"squarePixel.hlsl");
+	squarePSO_ = std::make_unique<PipelineState>(device_.Get(), squareRootSignature_->rootSignature(), input, &shader, desc);
 }
 
 void HelloWorld::createDescriptorHeap() {
 	rtvHeap_ = std::make_unique<RTVHeap>(device_.Get(), frameCount_);
 	rtvHeap_->createRenderTargetView(swapChain_.Get());
 
-	csuHeap_ = std::make_unique<CSUHeap>(device_, 8, 2, 0);
+	csuHeap_ = std::make_unique<CSUHeap>(device_, 12, 1 + 6 + 6, 0);
 
 	dsvHeap_ = std::make_unique<DSVHeap>(device_);
 	dsvHeap_->createDepthStencilBuffer(
@@ -493,21 +615,23 @@ void HelloWorld::createVertex() {
 
 	for (int i = 1; i <= 100; i++) {
 		for (int j = 1; j <= 100; j++) {
-			auto offset = XMFLOAT3(i, 0, j);
-			auto block = new Block(Block(), offset);
-			blocks_.push_back(block);
-			vertices_.insert(vertices_.end(), block->begin(), block->end());
+			// for (int k = 1; k <= 100; k++) {
+				auto offset = XMFLOAT3(i, 0, j);
+				auto block = new Block(Block(), offset);
+				blocks_.push_back(block);
+				vertices_.insert(vertices_.end(), block->begin(), block->end());
+				textureIndex_.insert(textureIndex_.end(), block->textureIndex_.begin(), block->textureIndex_.end());
+			// }
 		}
 	}
 
-	block = new Block(XMFLOAT3(0.0f, 0.0f, 0.0f));
-	blocks_.push_back(block);
+	// block = new Block(XMFLOAT3(0.0f, 0.0f, 0.0f));
+	// blocks_.push_back(block);
+	// vertices_.insert(vertices_.end(), block->begin(), block->end());
+	// textureIndex_.insert(textureIndex_.end(), block->textureIndex_.begin(), block->textureIndex_.end());
 	// bvh_->root_ = bvh_->buildBVH(blocks_, 0, blocks_.size() - 1);
 	std::sort(blocks_.begin(), blocks_.end());
 	bvh_->root_ = bvh_->buildBVH(blocks_, 0, blocks_.size() - 1);
-
-	// vertices_.clear();
-	vertices_.insert(vertices_.end(), block->begin(), block->end());
 
 	ThrowIfFailed(device_->CreateCommittedResource(
 		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
@@ -524,6 +648,22 @@ void HelloWorld::createVertex() {
 	blockBufferView_.BufferLocation = blockBuffer_->GetGPUVirtualAddress();
 	blockBufferView_.SizeInBytes = vertices_.size() * sizeof(Block::Vertex);
 	blockBufferView_.StrideInBytes = sizeof(Block::Vertex);
+
+	ThrowIfFailed(device_->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+		D3D12_HEAP_FLAG_NONE, 
+		&CD3DX12_RESOURCE_DESC::Buffer(textureIndex_.size() * sizeof(UINT)), 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&textureIndexBuffer_)));
+	
+	textureIndexBuffer_->Map(0, &range, reinterpret_cast<void**>(&textureIndexData_));
+	memcpy(textureIndexData_, textureIndex_.data(), textureIndex_.size() * sizeof(int));
+	textureIndexBuffer_->Unmap(0, nullptr);
+
+	textureIndexBufferView_.BufferLocation = textureIndexBuffer_->GetGPUVirtualAddress();
+	textureIndexBufferView_.SizeInBytes = textureIndex_.size() * sizeof(UINT);
+	textureIndexBufferView_.StrideInBytes = sizeof(UINT);
 
 	struct Point {
 		XMFLOAT3 pos;
@@ -548,64 +688,174 @@ void HelloWorld::createVertex() {
 	crossHairBufferView_.BufferLocation = crossHairBuffer_->GetGPUVirtualAddress();
 	crossHairBufferView_.SizeInBytes = sizeof(cross);
 	crossHairBufferView_.StrideInBytes = sizeof(XMFLOAT3);
+
+	auto rec1 = my::Rectangle(XMFLOAT2(-1.0 + 0.05, 0.0), 0.1, 2.0);
+	auto rec2 = my::Rectangle(XMFLOAT2(1.0 - 0.05, 0.0), 0.1, 2.0);
+	auto rec3 = my::Rectangle(XMFLOAT2(0.0, 1.0 - 0.05), 2.0, 0.1);
+	auto rec4 = my::Rectangle(XMFLOAT2(0.0, -1.0 + 0.05), 2.0, 0.1);
+
+	auto rec1_2 = my::Rectangle(rec1, XMFLOAT2(2.0f, 0.0f));
+	auto rec2_2 = my::Rectangle(rec2, XMFLOAT2(2.0f, 0.0f));
+	auto rec3_2 = my::Rectangle(rec3, XMFLOAT2(2.0f, 0.0f));
+	auto rec4_2 = my::Rectangle(rec4, XMFLOAT2(2.0f, 0.0f));
+
+	auto rec1_3 = my::Rectangle(rec1_2, XMFLOAT2(2.0f, 0.0f));
+	auto rec2_3 = my::Rectangle(rec2_2, XMFLOAT2(2.0f, 0.0f));
+	auto rec3_3 = my::Rectangle(rec3_2, XMFLOAT2(2.0f, 0.0f));
+	auto rec4_3 = my::Rectangle(rec4_2, XMFLOAT2(2.0f, 0.0f));
+
+	auto rec1_4 = my::Rectangle(rec1_3, XMFLOAT2(2.0f, 0.0f));
+	auto rec2_4 = my::Rectangle(rec2_3, XMFLOAT2(2.0f, 0.0f));
+	auto rec3_4 = my::Rectangle(rec3_3, XMFLOAT2(2.0f, 0.0f));
+	auto rec4_4 = my::Rectangle(rec4_3, XMFLOAT2(2.0f, 0.0f));
+
+	auto rec1_5 = my::Rectangle(rec1_4, XMFLOAT2(2.0f, 0.0f));
+	auto rec2_5 = my::Rectangle(rec2_4, XMFLOAT2(2.0f, 0.0f));
+	auto rec3_5 = my::Rectangle(rec3_4, XMFLOAT2(2.0f, 0.0f));
+	auto rec4_5 = my::Rectangle(rec4_4, XMFLOAT2(2.0f, 0.0f));
+
+	auto rec1_6 = my::Rectangle(rec1_5, XMFLOAT2(2.0f, 0.0f));
+	auto rec2_6 = my::Rectangle(rec2_5, XMFLOAT2(2.0f, 0.0f));
+	auto rec3_6 = my::Rectangle(rec3_5, XMFLOAT2(2.0f, 0.0f));
+	auto rec4_6 = my::Rectangle(rec4_5, XMFLOAT2(2.0f, 0.0f));
+
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1.vertices_.begin(), rec1.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2.vertices_.begin(), rec2.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3.vertices_.begin(), rec3.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4.vertices_.begin(), rec4.vertices_.end());
+	 
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1_2.vertices_.begin(), rec1_2.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2_2.vertices_.begin(), rec2_2.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3_2.vertices_.begin(), rec3_2.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4_2.vertices_.begin(), rec4_2.vertices_.end());
+
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1_3.vertices_.begin(), rec1_3.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2_3.vertices_.begin(), rec2_3.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3_3.vertices_.begin(), rec3_3.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4_3.vertices_.begin(), rec4_3.vertices_.end());
+
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1_4.vertices_.begin(), rec1_4.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2_4.vertices_.begin(), rec2_4.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3_4.vertices_.begin(), rec3_4.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4_4.vertices_.begin(), rec4_4.vertices_.end());
+
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1_5.vertices_.begin(), rec1_5.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2_5.vertices_.begin(), rec2_5.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3_5.vertices_.begin(), rec3_5.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4_5.vertices_.begin(), rec4_5.vertices_.end());
+
+	rectangleVertices_.insert(rectangleVertices_.end(), rec1_6.vertices_.begin(), rec1_6.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec2_6.vertices_.begin(), rec2_6.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec3_6.vertices_.begin(), rec3_6.vertices_.end());
+	rectangleVertices_.insert(rectangleVertices_.end(), rec4_6.vertices_.begin(), rec4_6.vertices_.end());
+
+	ThrowIfFailed(device_->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+		D3D12_HEAP_FLAG_NONE, 
+		&CD3DX12_RESOURCE_DESC::Buffer(rectangleVertices_.size() * sizeof(my::Rectangle::Vertex)), 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&rectangleBuffer_)));
+	
+	rectangleBuffer_->Map(0, &range, reinterpret_cast<void**>(&rectangleData_));
+	memcpy(rectangleData_, rectangleVertices_.data(), rectangleVertices_.size() * sizeof(my::Rectangle::Vertex));
+	textureIndexBuffer_->Unmap(0, nullptr);
+
+	rectangleView_.BufferLocation = rectangleBuffer_->GetGPUVirtualAddress();
+	rectangleView_.SizeInBytes = rectangleVertices_.size() * sizeof(my::Rectangle::Vertex);
+	rectangleView_.StrideInBytes = sizeof(my::Rectangle::Vertex);
+
+	auto square1 = my::Square(XMFLOAT2(0.0, 0.0), 0.9);
+	auto square2 = my::Square(square1, XMFLOAT2(2.0, 0.0));
+	auto square3 = my::Square(square2, XMFLOAT2(2.0, 0.0));
+	auto square4 = my::Square(square3, XMFLOAT2(2.0, 0.0));
+	auto square5 = my::Square(square4, XMFLOAT2(2.0, 0.0));
+	auto square6 = my::Square(square5, XMFLOAT2(2.0, 0.0));
+
+	squareVertices_.insert(squareVertices_.end(), square1.vertices_.begin(), square1.vertices_.end());
+	squareVertices_.insert(squareVertices_.end(), square2.vertices_.begin(), square2.vertices_.end());
+	squareVertices_.insert(squareVertices_.end(), square3.vertices_.begin(), square3.vertices_.end());
+	squareVertices_.insert(squareVertices_.end(), square4.vertices_.begin(), square4.vertices_.end());
+	squareVertices_.insert(squareVertices_.end(), square5.vertices_.begin(), square5.vertices_.end());
+	squareVertices_.insert(squareVertices_.end(), square6.vertices_.begin(), square6.vertices_.end());
+
+	ThrowIfFailed(device_->CreateCommittedResource(
+		&CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD), 
+		D3D12_HEAP_FLAG_NONE, 
+		&CD3DX12_RESOURCE_DESC::Buffer(squareVertices_.size() * sizeof(my::Square::Vertex)), 
+		D3D12_RESOURCE_STATE_GENERIC_READ, 
+		nullptr, 
+		IID_PPV_ARGS(&squareBuffer_)));
+	
+	squareBuffer_->Map(0, &range, reinterpret_cast<void**>(&squareData_));
+	memcpy(squareData_, squareVertices_.data(), squareVertices_.size() * sizeof(my::Square::Vertex));
+	squareBuffer_->Unmap(0, nullptr);
+
+	squareView_.BufferLocation = squareBuffer_->GetGPUVirtualAddress();
+	squareView_.SizeInBytes = squareVertices_.size() * sizeof(my::Square::Vertex);
+	squareView_.StrideInBytes = sizeof(my::Square::Vertex);
 }
 
 void HelloWorld::loadAssets() {
-	csuHeap_->createShaderResourceBuffer("skybox", "textures/snowcube1024.dds", commandQueue_.Get());
-	csuHeap_->createShaderResourceBuffer("grass", "textures/planks.dds", commandQueue_.Get());
-
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = csuHeap_->buffer("skybox")->GetDesc().Format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-	srvDesc.TextureCube.MipLevels = csuHeap_->buffer("skybox")->GetDesc().MipLevels;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	csuHeap_->createShaderResourceView("skybox", srvDesc);
+	csuHeap_->createShaderResourceView("skybox", "textures/snowcube1024.dds", srvDesc);
 
-	srvDesc.Format = csuHeap_->buffer("grass")->GetDesc().Format;
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
-	srvDesc.TextureCube.MipLevels = csuHeap_->buffer("grass")->GetDesc().MipLevels;
 	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	csuHeap_->createShaderResourceView("grass", srvDesc);
+	csuHeap_->createShaderResourceView("grass", "textures/grass.dds", srvDesc);
 
-	csuHeap_->createConstantBuffer(
-		"model", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	csuHeap_->createShaderResourceView("ice", "textures/ice.dds", srvDesc);
+
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	csuHeap_->createShaderResourceView("planks", "textures/planks.dds", srvDesc);
+
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	csuHeap_->createShaderResourceView("stone", "textures/stone.dds", srvDesc);
+
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	csuHeap_->createShaderResourceView("woolBlue", "textures/woolBlue.dds", srvDesc);
+
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	csuHeap_->createShaderResourceView("sand", "textures/sand.dds", srvDesc);
+
+ 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	csuHeap_->createShaderResourceView("grass2D", "textures/grass2D.dds", srvDesc);
+	csuHeap_->createShaderResourceView("ice2D", "textures/ice2D.dds", srvDesc);
+	csuHeap_->createShaderResourceView("planks2D", "textures/planks2D.dds", srvDesc);
+	csuHeap_->createShaderResourceView("stone2D", "textures/stone2D.dds", srvDesc);
+	csuHeap_->createShaderResourceView("woolBlue2D", "textures/woolBlue2D.dds", srvDesc);
+	csuHeap_->createShaderResourceView("sand2D", "textures/sand2D.dds", srvDesc);
+
+
 	csuHeap_->createConstantBufferView("model", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"view", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("view", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"projection", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("projection", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"mvp", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("mvp", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"model_", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("model_", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"view_", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("view_", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"projection_", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("projection_", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 
-	csuHeap_->createConstantBuffer(
-		"offset", 
-		Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 	csuHeap_->createConstantBufferView("offset", Help::calculateConstantBufferSize(sizeof(XMFLOAT3)));
+
+	csuHeap_->createConstantBufferView("recModel", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
+	csuHeap_->createConstantBufferView("aspect", Help::calculateConstantBufferSize(sizeof(float)));
+	csuHeap_->createConstantBufferView("selected", Help::calculateConstantBufferSize(sizeof(int)));
+
+	csuHeap_->createConstantBufferView("scale", Help::calculateConstantBufferSize(sizeof(XMFLOAT4X4)));
 }
 
 void HelloWorld::prepare() {
