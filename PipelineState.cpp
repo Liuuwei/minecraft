@@ -3,6 +3,7 @@
 #include "Shader.h"
 
 #include <d3dx12.h>
+#include <MyDirectx/MySampleHelp.h>
 
 D3D12_GRAPHICS_PIPELINE_STATE_DESC PipelineState::getDefaultDesc() {
 	CD3DX12_RASTERIZER_DESC rsState(D3D12_DEFAULT);

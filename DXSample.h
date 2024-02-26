@@ -1,17 +1,15 @@
 ﻿#pragma once
 
-#include "DXSampleHelper.h"
-
 #include <dxgi.h>
 #include <DirectXMath.h>
 #include <d3dx12.h>
 #include <d3d12.h>
 #include <dxgi1_4.h>
 
-class DXSample {
+class Render {
 public:
-	DXSample(UINT width, UINT height, std::wstring name);
-	virtual ~DXSample();
+	Render(UINT width, UINT height, std::wstring name);
+	virtual ~Render();
 
 	virtual void onInit() = 0;
 	virtual void onUpdate(WPARAM wParam, LPARAM lParam) = 0;

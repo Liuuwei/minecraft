@@ -1,6 +1,6 @@
 ﻿#include "RootSignature.h"
 
-#include "DXSampleHelper.h"
+#include <MyDirectx/MySampleHelp.h>
 
 ID3D12Device2* my::RootSignature::device_ = nullptr;
 D3D12_FEATURE_DATA_ROOT_SIGNATURE my::RootSignature::featureData_ = D3D12_FEATURE_DATA_ROOT_SIGNATURE{};

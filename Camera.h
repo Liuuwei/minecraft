@@ -1,6 +1,11 @@
 ﻿#pragma once
 #include <DirectXMath.h>
 #include <windows.h>
+#include <directxtk12/Keyboard.h>
+#include <directxtk12/Mouse.h>
+#include <physx/PxPhysicsAPI.h>
+
+#include "Help.h"
 
 class Camera {
 public:
@@ -13,26 +18,44 @@ public:
 
 	void setCenter(int x, int y);
 
-	void onKeyUp(WPARAM key);
-	void onKeyDown(WPARAM key);
+	void onMouseMove(int x, int y);
 
-	void onMouseMovement(LPARAM param);
-
+	void update(DirectX::Keyboard::State state, DirectX::Keyboard::KeyboardStateTracker tracker);
 	void update(float deltaTime);
 
 	DirectX::XMFLOAT3 position() const { return position_; }
 	DirectX::XMFLOAT3 front() const { return front_; }
+	DirectX::XMFLOAT3 levelFront() const { return levelFront_; }
+
+	physx::PxRigidDynamic* body_ = nullptr;
+
+	bool sky_ = false;
+	bool thirdPerson_ = false;
+
+	bool xStop_ = false;
+	bool negXStop_ = false;
+	bool yStop_ = false;
+	bool negYStop_ = false;
+	bool zStop_ = false;
+	bool negZStop_ = false;
+
+	bool rise_ = false;
+
+	HWND hwnd_;
+	physx::PxScene* scene_;
 private:
 	struct Keys {
 		bool FORWARD;
 		bool BACKWARD;
 		bool LEFT;
 		bool RIGHT;
+		bool SPACE;
 	};
 
 	DirectX::XMFLOAT3 position_{};
 	DirectX::XMFLOAT3 front_{};
 	DirectX::XMFLOAT3 up_{};
+	DirectX::XMFLOAT3 levelFront_{};
 	DirectX::XMFLOAT3 right_{};
 	DirectX::XMFLOAT3 worldUp_{};
 
@@ -49,4 +72,5 @@ private:
 	int centerY_;
 
 	Keys keys_{};
+
 };

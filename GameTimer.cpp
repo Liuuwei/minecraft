@@ -1,7 +1,6 @@
 ﻿#include "GameTimer.h"
 
-#include "Camera.h"
-#include "DXSample.h"
+#include <windows.h>
 
 GameTimer::GameTimer() {
 	INT64 countPerSecond;
@@ -22,8 +21,9 @@ float GameTimer::deltaTime() const {
 }
 
 void GameTimer::reset() {
-	QueryPerformanceFrequency(reinterpret_cast<LARGE_INTEGER*>(&baseTime_));
+	QueryPerformanceCounter(reinterpret_cast<LARGE_INTEGER*>(&baseTime_));
 	currTime_ = baseTime_;
+	prevTime_ = baseTime_;
 	pausedTime_ = 0;
 	stopped_ = false;
 }

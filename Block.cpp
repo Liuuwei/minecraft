@@ -1,16 +1,12 @@
 ﻿#include "Block.h"
 
-#include <intsafe.h>
-#include <iso646.h>
-#include <tuple>
-
-#include "Help.h"
+#include <cmath>
 
 using namespace DirectX;
 
 ID3D12Device2* Block::device_ = nullptr;
 
-void Block::initialize() {
+void Block::init() {
 	vertices_ = {
 		// 正面
 		{x_ - radius_, y_ + radius_, z_ + radius_, -0.5f, 0.5f, 0.5f},
@@ -73,23 +69,23 @@ void Block::initialize() {
 
 	XMStoreFloat4x4(&model_, XMMatrixTranslationFromVector(XMLoadFloat3(&XMFLOAT3(x_, y_, z_))));
 
-	textureIndex_ = std::vector<UINT>(36, index_);
+	textureVertices_ = std::vector<UINT>(36, index_);
 }
 
 Block::Block(UINT index) : Block(DirectX::XMFLOAT3(0.0f, 0.0f, 0.0f), 0.5f, index) {
-	initialize();
+	init();
 }
 
 Block::Block(DirectX::XMFLOAT3 position, UINT index) : position_(position), x_(position.x), y_(position.y), z_(position.z), radius_(0.5f), index_(index) {
-	initialize();
+	init();
 }
 
 Block::Block(DirectX::XMFLOAT3 position, float radius, UINT index) : position_(position), x_(position_.x), y_(position_.y), z_(position_.z), radius_(radius), index_(index) {
-	initialize();
+	init();
 }
 
 Block::Block(const Block& rhs, DirectX::XMFLOAT3 offset, UINT index) : position_(DirectX::XMFLOAT3(rhs.position().x + offset.x, rhs.position().y + offset.y, rhs.position().z + offset.z)), x_(position_.x), y_(position_.y), z_(position_.z), radius_(rhs.radius()), index_(index) {
-	initialize();
+	init();
 }
 
 float Block::lengthTo(DirectX::XMFLOAT3 target) const {

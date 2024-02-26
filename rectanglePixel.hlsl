@@ -10,7 +10,7 @@ cbuffer cb2 : register(b2) {
 
 float4 main(PSInput input) : SV_TARGET
 {
-    if (input.id / 24 == selected - 1) {
+    if (input.id / 24 != selected - 1) {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
     }
 	return float4(1.0f, 1.0f, 1.0f, 1.0f);

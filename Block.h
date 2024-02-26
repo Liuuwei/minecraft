@@ -1,13 +1,11 @@
 ﻿#pragma once
-#include <array>
-#include <complex>
+
 #include <DirectXMath.h>
 #include <vector>
+#include <physx/PxPhysicsAPI.h>
 
-#include "Animation.h"
 #include "BoundingBox.h"
 #include "Help.h"
-#include "CSUHeap.h"
 
 class Block {
 public:
@@ -44,7 +42,34 @@ public:
 		device_ = device;
 	}
 
-	void initialize();
+	void init();
+
+	void setPosition(float x, float y, float z) {
+		position_ = DirectX::XMFLOAT3(x, y, z);
+		x_ = x;
+		y_ = y;
+		z_ = z;
+
+		init();
+	}
+	void setPosition(DirectX::XMFLOAT3 position) {
+		position_ = position;
+		x_ = position.x;
+		y_ = position.y;
+		z_ = position.z;
+
+		init();
+	}
+	void setPosition(const physx::PxVec3& position) {
+		position_.x = position.x;
+		position_.y = position.y;
+		position_.z = position.z;
+		x_ = position.x;
+		y_ = position.y;
+		z_ = position.z;
+
+		init();
+	}
 
 	DirectX::XMFLOAT3 position() const { return position_; }
 	float x() const { return x_; }
@@ -68,6 +93,10 @@ public:
 
 	Face selectedFace(DirectX::XMFLOAT3 pOrigin, DirectX::XMFLOAT3 pDirection);
 	Face selectedFace(DirectX::XMFLOAT3 pOrigin, DirectX::XMFLOAT3 pDirection, std::wstring& msg);
+
+	physx::PxRigidStatic* body_;
+
+	bool move_ = false;
 private:
 	static ID3D12Device2* device_;
 
@@ -79,7 +108,7 @@ private:
 
 public:
 	std::vector<Vertex> vertices_;
-	std::vector<UINT> textureIndex_;
+	std::vector<UINT> textureVertices_;
 	UINT index_;
 
 private:

@@ -20,17 +20,13 @@ cbuffer cb2 : register(b2)
     float4x4 p;
 }
 
-cbuffer cb3 : register(b3) {
-    float4x4 mvp;
-}
-
 PSInput main(float3 position : POSITION, float3 uv : TEXCOORD, int textureIndex : TEXTURE_INDEX)
 {
     PSInput result;
     result.position = mul(float4(position, 1.0), m);
     result.position = mul(result.position, v);
     result.position = mul(result.position, p);
-	result.uv = uv;
+    result.uv = uv;
     result.textureIndex = textureIndex;
 
     return result;

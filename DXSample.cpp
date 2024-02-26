@@ -8,7 +8,6 @@ using namespace Microsoft::WRL;
 
 DXSample::DXSample(UINT width, UINT height, std::wstring name) : width_(width), height_(height), title_(std::move(name)) {
 	WCHAR assetsPath[512];
-	getAssetsPath(assetsPath, _countof(assetsPath));
 	assetsPath_ = assetsPath;
 
 	aspectRatio_ = static_cast<float>(width_ )/ static_cast<float>(height_);

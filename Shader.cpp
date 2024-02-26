@@ -2,7 +2,7 @@
 
 #include <D3Dcompiler.h>
 
-#include "DXSampleHelper.h"
+#include <MyDirectx/MySampleHelp.h>
 
 Shader::Shader(const wchar_t* vs) {
 	ThrowIfFailed(D3DCompileFromFile(vs, nullptr, nullptr, "main", "vs_5_1", compileFlags_, 0, &vs_, nullptr));

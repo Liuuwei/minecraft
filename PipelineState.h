@@ -3,8 +3,6 @@
 #include <vector>
 #include <wrl/client.h>
 
-#include "DXSampleHelper.h"
-
 class Shader;
 
 class PipelineState {

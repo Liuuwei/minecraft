@@ -1,13 +1,15 @@
 ﻿#include "Win32Application.h"
 
-#include "DXSample.h"
+#include <MyDirectx/MySample.h>
+
+#include <directxtk12/Keyboard.h>
+#include <directxtk12/Mouse.h>
 
 HWND Win32Application::hwnd_ = nullptr;
 
-int Win32Application::run(DXSample* sample, HINSTANCE hInstance, int nCmdShow) {
+int Win32Application::run(MySample* sample, HINSTANCE hInstance, int nCmdShow) {
 	int argc;
 	LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
-	sample->parseCommandLineArgs(argv, argc);
 	LocalFree(argv);
 
 	WNDCLASSEX windowClass = { 0};
@@ -26,8 +28,8 @@ int Win32Application::run(DXSample* sample, HINSTANCE hInstance, int nCmdShow) {
 		windowClass.lpszClassName, 
 		sample->getTitle(), 
 		WS_OVERLAPPEDWINDOW, 
-		CW_USEDEFAULT, 
-		CW_USEDEFAULT, 
+		0, 
+		0, 
 		windowRect.right - windowRect.left, 
 		windowRect.bottom - windowRect.top, 
 		nullptr, 
@@ -54,45 +56,36 @@ int Win32Application::run(DXSample* sample, HINSTANCE hInstance, int nCmdShow) {
 }
 
 LRESULT Win32Application::windowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-	DXSample* sample = reinterpret_cast<DXSample*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
+	MySample* sample = reinterpret_cast<MySample*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
 
 	switch (message) {
 	case WM_CREATE:
 		{
 		LPCREATESTRUCT createStruct = reinterpret_cast<LPCREATESTRUCT>(lParam);
 		SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(createStruct->lpCreateParams));
-		ShowCursor(FALSE);
 		}
 		return 0;
 
-	case WM_KEYDOWN: 
-		if (sample) {
-			sample->onKeyDown(wParam);
-		} 
-		return 0;
-	
-	case WM_KEYUP: 
-		if (sample) {
-			sample->onKeyUp(wParam);
-		}
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+		DirectX::Keyboard::ProcessMessage(message, wParam, lParam);
 		return 0;
 
-	case WM_RBUTTONDOWN:
-		if (sample) {
-			sample->onRightButtonDown();
-		}
-		return 0;
-
-	case WM_LBUTTONDOWN:
-		if (sample) {
-			sample->onLeftButtonDown();
-		}
-		return 0;
-
-	case WM_MOUSEWHEEL:
-		if (sample) {
-			sample->onMouseWheel(wParam);
-		}
+	case WM_ACTIVATE:
+    case WM_ACTIVATEAPP:
+    case WM_INPUT:
+    case WM_MOUSEMOVE:
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+    case WM_RBUTTONDOWN:
+    case WM_RBUTTONUP:
+    case WM_MBUTTONDOWN:
+    case WM_MBUTTONUP:
+    case WM_MOUSEWHEEL:
+    case WM_XBUTTONDOWN:
+    case WM_XBUTTONUP:
+    case WM_MOUSEHOVER:
+		DirectX::Mouse::ProcessMessage(message, wParam, lParam);
 		return 0;
 
 	case WM_PAINT:
